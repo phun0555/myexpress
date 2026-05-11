@@ -1,8 +1,12 @@
 // index.js
 const express = require('express');
 const line = require('@line/bot-sdk');
+const app = express()
+const port = 3099
 
-const app = express();
+app.get('/', (req, res) => {
+  res.send('Hello world!,thanakrit')
+})
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -61,7 +65,10 @@ app.use((err, req, res, next) => {
   res.status(500).send(err.message);
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3099;
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
+app.listen(port, () => {
+  console.log(`Example app listening on port ${port}`)
+})

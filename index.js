@@ -16,7 +16,7 @@ const client = new line.messagingApi.MessagingApiClient({
 
 // หน้าแรกสำหรับตรวจสอบว่า Server ของเราทำงานหรือไม่
 app.get('/', (req, res) => {
-  res.send('Hello world!, thanakrit (Port 3002)test');
+  res.send('Hello world!, thanakrit (Port 3002)testtt');
 });
 
 // Middleware สำหรับ Log ดู Request (ยกเว้น webhook เพื่อไม่ให้กวน line middleware)

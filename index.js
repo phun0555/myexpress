@@ -2,7 +2,7 @@
 const express = require('express');
 const line = require('@line/bot-sdk');
 const app = express()
-const port = 3099
+const port = 3000
 
 app.get('/', (req, res) => {
   res.send('Hello world!,thanakrit')
@@ -65,7 +65,7 @@ app.use((err, req, res, next) => {
   res.status(500).send(err.message);
 });
 
-const PORT = process.env.PORT || 3099;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });

@@ -2,7 +2,7 @@ const express = require('express');
 const line = require('@line/bot-sdk');
 
 const app = express();
-const PORT = 3099; // กำหนดพอร์ต 3099 ที่นี่ที่เดียว
+const PORT = 4567; // กำหนดพอร์ต 3099 ที่นี่ที่เดียว
 
 // ตั้งค่าจาก LINE Developers Console
 const config = {

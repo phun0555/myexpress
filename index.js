@@ -2,7 +2,7 @@ const express = require('express');
 const line = require('@line/bot-sdk');
 
 const app = express();
-const PORT = 4567; // กำหนดพอร์ต 3099 ที่นี่ที่เดียว
+const PORT = 3002; 
 
 // ตั้งค่าจาก LINE Developers Console
 const config = {
@@ -16,7 +16,7 @@ const client = new line.messagingApi.MessagingApiClient({
 
 // หน้าแรกสำหรับตรวจสอบว่า Server ของเราทำงานหรือไม่
 app.get('/', (req, res) => {
-  res.send('Hello world!, thanakrit (Port 4567)');
+  res.send('Hello world!, thanakrit (Port 3002)');
 });
 
 // Middleware สำหรับ Log ดู Request (ยกเว้น webhook เพื่อไม่ให้กวน line middleware)

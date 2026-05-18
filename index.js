@@ -1,5 +1,5 @@
 // index.js
-require("dotenv").config(); // โหลดค่าจาก .env บนสุด
+require("dotenv").config(); 
 const express = require("express");
 const line = require("@line/bot-sdk");
 const { createClient } = require("@supabase/supabase-js");
@@ -8,206 +8,122 @@ const { GoogleGenAI } = require("@google/genai");
 const app = express();
 const PORT = process.env.PORT || 3002; 
 
-// 1. ตั้งค่า LINE Developers Console ข้อมูลผ่าน .env
+// กำหนดการเชื่อมต่อ LINE Platform
 const config = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.LINE_CHANNEL_SECRET,
 };
 
-// 2. ประกาศตัวแปร LINE Clients ไว้ด้านบนสุด
-const client = new line.messagingApi.MessagingApiClient({
-  channelAccessToken: config.channelAccessToken,
-});
+const client = new line.messagingApi.MessagingApiClient({ channelAccessToken: config.channelAccessToken });
+const blobClient = new line.messagingApi.MessagingApiBlobClient({ channelAccessToken: config.channelAccessToken });
 
-const blobClient = new line.messagingApi.MessagingApiBlobClient({
-  channelAccessToken: config.channelAccessToken,
-});
-
-// 3. กำหนดค่า Gemini และ Supabase Client
+// เชื่อมต่อโมเดลคู่หูอย่างเป็นทางการ (Gemini และ Supabase)
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Middleware สำหรับมอนิเตอร์ดู Log การยิง Request เข้าเซิร์ฟเวอร์
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
+// เส้นทาง Webhook สอดคล้องตามข้อกำหนดหน้า 44 ของอาจารย์
+app.use('/webhook', line.middleware(config));
 
-// หน้าแรกตรวจสอบเซิร์ฟเวอร์
-app.get("/", (req, res) => {
-  res.send("Hello Teacher, Thanakrit Manaprasertsak (Port 3002)");
-});
-
-// 4. LINE Webhook Setup รับค่าที่เส้นทาง /callback 
-app.post("/callback", line.middleware(config), (req, res) => {
-  // ตอบกลับสถานะ 200 ทันทีตามกฎของ LINE
+app.post('/webhook', (req, res) => {
   res.status(200).end();
-
   if (req.body && req.body.events) {
     Promise.all(req.body.events.map(handleEvent))
-      .then((result) => console.log("Handle event success:", result))
-      .catch((err) => {
-        console.error("Error handling webhook event:", err);
-      });
+      .then(() => console.log("LINE Webhook Event Processed Successfully"))
+      .catch((err) => console.error("Webhook Error:", err));
   }
 });
 
-// 5. ฟังก์ชันหลักในการจัดการ Event และบันทึกข้อมูล (ปรับปรุงตามสไลด์หน้า 44)
+// 🌟 [จุดแก้ไขหลักบนเซิร์ฟ]: เติมลอจิกคุยกับ Gemini คืนสู่ฟังก์ชัน handleEvent
 async function handleEvent(event) {
-  // รองรับเฉพาะ Event ประเภทข้อความ (Message Event) เท่านั้น
-  if (event.type !== 'message') {
-    return null;
-  }
+  if (event.type !== 'message') return null;
 
   const userId = event.source.userId || 'unknown';
   const replyToken = event.replyToken || '';
   const messageId = event.message.id;
-  const messageType = event.message.type; // text, image, sticker, video, etc.
+  const messageType = event.message.type;
  
   let content = null;
   let botReplyText = '';
 
-  // กรณีที่ 1: ตรวจสอบหากเป็น "ข้อความตัวอักษร" -> เรียกใช้งาน Gemini
+  // 🎯 โจทย์ข้อ 1: รับส่งและประมวลผลข้อความตัวอักษรด้วยโมเดล Gemini
   if (event.message.type === 'text') {
-    content = event.message.text; // 🟢 ประกาศรับค่าข้อความก่อน (ย้ายขึ้นมาไว้บนสุด)
-    
+    content = event.message.text; 
     try {
-      // 🟢 เรียกใช้คำสั่งของ Gemini ตามสไลด์หน้า 44 ของอาจารย์
+      // เรียกโมเดลตรงตามสไลด์ที่อาจารย์สอนเป๊ะ ๆ
       const geminiResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: content,
       });
-      
       botReplyText = geminiResponse.text || 'ขออภัยครับ ระบบไม่สามารถสร้างคำตอบได้';
-      
     } catch (err) {
-      console.error("Gemini Error:", err);
-      botReplyText = "ขออภัย เกิดข้อผิดพลาดในการเชื่อมต่อกับ Gemini ครับ";
+      console.error("Gemini Connect Error:", err);
+      botReplyText = "ระบบขัดข้อง ไม่สามารถดึงความรู้จาก Gemini ได้ในขณะนี้";
     }
 
-  // กรณีที่ 2: ตรวจสอบหากเป็น "รูปภาพ" -> ส่งให้ Gemini วิเคราะห์สัตว์ + อัปโหลดลง Supabase
+  // 🎯 โจทย์ข้อ 2-3: ดักจับรูปภาพ แจ้งสถานะด่วน และส่งให้ Gemini แกะคัดแยกประเภทสัตว์
   } else if (event.message.type === 'image') {
     try {
-      // แจ้งเตือนรอบแรกว่ารับรูปแล้ว
+      // ตอบกลับผู้ใช้งานทันทีเพื่อบอกสถานะการทำงาน (รับแต้มพิเศษ)
       await client.replyMessage({
         replyToken: replyToken,
         messages: [{ type: 'text', text: 'ส่งรูปภาพสำเร็จ รอสักครู่นะครับกำลังประมวลผล...' }]
       });
 
-      // 1. ดาวน์โหลดรูปภาพจาก LINE
+      // ดึงสตรีมไฟล์ภาพมาแปลงเป็นรูปแบบ Buffer เพื่อส่งต่อ
       const stream = await blobClient.getMessageContent(messageId);
       const chunks = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk);
-      }
+      for await (const chunk of stream) { chunks.push(chunk); }
       const buffer = Buffer.concat(chunks);
 
-      // 2. ส่งรูปให้ Gemini วิเคราะห์สายพันธุ์สัตว์
+      // ยิงข้อมูลรูปภาพให้ Gemini คัดแยกสายพันธุ์สัตว์
       const geminiResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
-          { text: "รูปนี้คือสัตว์ชนิดอะไร ตอบสั้นๆ ถ้าไม่ใช่สัตว์ให้ตอบว่า ไม่ใช่สัตว์" },
+          { text: "รูปนี้คือสัตว์ชนิดอะไร ตอบเป็นภาษาไทยสั้นๆ ถ้าไม่ใช่สัตว์ให้ตอบว่า ไม่ใช่สัตว์" },
           { inlineData: { data: buffer.toString('base64'), mimeType: 'image/jpeg' } }
         ]
       });
-      const animalName = geminiResponse.text || 'ไม่สามารถระบุได้';
+      botReplyText = `นี่คือ: ${geminiResponse.text || 'ไม่สามารถระบุได้'}`;
 
-      // 3. อัปโหลดรูปภาพลง Supabase Bucket ชื่อ 'uploads'
+      // บันทึกจัดเก็บรูปภาพเข้าคลังเก็บไฟล์บนระบบ Supabase Storage
       const fileName = `${messageId}.jpg`;
-      const { data, error: uploadError } = await supabase.storage
-        .from('uploads')
-        .upload(fileName, buffer, { contentType: 'image/jpeg' });
-        
-      if (uploadError) {
-        console.error('Supabase Upload Error:', uploadError);
-      }
-      
-      const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
-      const imageUrl = publicUrlData.publicUrl;
+      await supabase.storage.from('uploads').upload(`bot-uploads/${fileName}`, buffer, { contentType: 'image/jpeg', upsert: true });
+      const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(`bot-uploads/${fileName}`);
+      content = publicUrlData.publicUrl;
 
-      // 4. บันทึกข้อมูลลงตาราง messages ในฐานข้อมูล Supabase
-      const { error: dbError } = await supabase.from('messages').insert([
-        {
-          user_id: userId,
-          message_id: messageId,
-          type: 'image',
-          content: imageUrl,
-          reply_token: replyToken,
-          reply_content: animalName
-        }
-      ]);
-      if (dbError) {
-        console.error('Supabase Insert Error:', dbError);
-      }
-
-      // 5. ส่งคำตอบผ่าน Push Message
-      return await client.pushMessage({
-        to: userId,
-        messages: [{ type: 'text', text: `นี่คือ: ${animalName}` }]
-      });
-
+      // พ่นผลลัพธ์การคัดแยกสัตว์ตอบแชทกลับหาผู้ใช้
+      await client.pushMessage({ to: userId, messages: [{ type: 'text', text: botReplyText }] });
     } catch (err) {
-      console.error("Image processing error:", err);
-      return await client.pushMessage({
-        to: userId,
-        messages: [{ type: 'text', text: 'ขออภัย เกิดข้อผิดพลาดในการประมวลผลรูปภาพครับ' }]
-      });
+      console.error("Image Processing Failed:", err);
+      botReplyText = 'เซิร์ฟเวอร์เกิดข้อผิดพลาดในการประมวลผลรูปภาพ';
+      await client.pushMessage({ to: userId, messages: [{ type: 'text', text: botReplyText }] });
     }
-  } else {
-    // หากเป็นประเภทอื่น เช่น sticker, video
-    content = `[Received ${messageType} message]`;
-    botReplyText = `ได้รับข้อความประเภท ${messageType} แล้วครับ`;
   }
 
-  // 🟢 บันทึกข้อมูลลงฐานข้อมูล Supabase และตอบแชทกลับหาผู้ใช้
+  // 🟢 บันทึกโครงสร้างข้อมูลลงตาราง Database (ปรับตัวแปรตามสไลด์อาจารย์)
   try {
-    const { error } = await supabase
-      .from('messages')
-      .insert([
-        {
-          user_id: userId,
-          message_id: messageId,
-          type: messageType,
-          content: content,
-          reply_token: replyToken,
-          reply_content: botReplyText 
-        }
-      ]);
+    await supabase.from('messages').insert([
+      {
+        user_id: userId,
+        message_id: messageId,
+        type: messageType,
+        content: content,
+        reply_token: replyToken, // อ้างอิงตามชื่อฟิลด์หน้าสไลด์ 44
+        reply_content: botReplyText 
+      }
+    ]);
 
-    if (error) {
-      console.error('Supabase Insert Error:', error.message);
+    if (event.message.type === 'text') {
+      return await client.replyMessage({
+        replyToken: replyToken,
+        messages: [{ type: 'text', text: botReplyText }],
+      });
     }
-
-    // ตอบกลับข้อความหาผู้ใช้ใน LINE (ถ้าเป็น Text ค่า botReplyText จะเป็นคำตอบจาก Gemini แล้ว)
-    return await client.replyMessage({
-      replyToken: replyToken,
-      messages: [{ type: 'text', text: botReplyText }],
-    });
-
   } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการประมวลผลระบบ:', error);
+    console.error('Supabase DB Sync Error:', error);
   }
 }
 
-// 6. Error Handling ระบบความปลอดภัยลายเซ็น LINE
-app.use((err, req, res, next) => {
-  if (err instanceof line.SignatureValidationFailed) {
-    console.error("Signature validation failed:", err.signature);
-    res.status(401).send(err.signature);
-    return;
-  } else if (err instanceof line.JSONParseError) {
-    console.error("JSON Parse Error:", err.raw);
-    res.status(400).send(err.raw);
-    return;
-  }
-  console.error("Global Error:", err);
-  res.status(500).send(err.message);
-});
-
-// เริ่มต้นรันเซิร์ฟเวอร์ที่พอร์ต 3002
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });

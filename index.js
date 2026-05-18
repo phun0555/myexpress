@@ -21,6 +21,9 @@ const blobClient = new line.messagingApi.MessagingApiBlobClient({ channelAccessT
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+app.get("/", (req, res) => {
+  res.send("Hello Teacher, Thanakrit Manaprasertsak (Port 3002)");
+});
 // เส้นทาง Webhook สอดคล้องตามข้อกำหนดหน้า 44 ของอาจารย์
 app.use('/webhook', line.middleware(config));
 

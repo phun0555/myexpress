@@ -36,12 +36,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// หน้าแรกตรวจสอบเซิร์ฟเวอร์ (ระบุชื่อของคุณ Thanakrit)
+// หน้าแรกตรวจสอบเซิร์ฟเวอร์
 app.get("/", (req, res) => {
   res.send("Hello Teacher, Thanakrit Manaprasertsak (Port 3002)");
 });
 
-// 4. LINE Webhook Setup รับค่าที่เส้นทาง /callback ตามโดเมนของคุณ
+// 4. LINE Webhook Setup รับค่าที่เส้นทาง /callback 
 app.post("/callback", line.middleware(config), (req, res) => {
   // ตอบกลับสถานะ 200 ทันทีตามกฎของ LINE
   res.status(200).end();
@@ -55,7 +55,7 @@ app.post("/callback", line.middleware(config), (req, res) => {
   }
 });
 
-// 5. ฟังก์ชันหลักในการจัดการ Event และบันทึกข้อมูล (ปรับปรุงตามสไลด์อาจารย์)
+// 5. ฟังก์ชันหลักในการจัดการ Event และบันทึกข้อมูล (ปรับปรุงตามสไลด์หน้า 44)
 async function handleEvent(event) {
   // รองรับเฉพาะ Event ประเภทข้อความ (Message Event) เท่านั้น
   if (event.type !== 'message') {
@@ -70,16 +70,17 @@ async function handleEvent(event) {
   let content = null;
   let botReplyText = '';
 
-  // กรณีที่ 1: ตรวจสอบหากเป็น "ข้อความตัวอักษร" -> ใช้เขียนตามสไลด์อาจารย์เป๊ะๆ
+  // กรณีที่ 1: ตรวจสอบหากเป็น "ข้อความตัวอักษร" -> เรียกใช้งาน Gemini
   if (event.message.type === 'text') {
-    content = event.message.text;
+    content = event.message.text; // 🟢 ประกาศรับค่าข้อความก่อน (ย้ายขึ้นมาไว้บนสุด)
     
     try {
-      // 🟢 ปรับตามสไลด์หน้า 44 ของอาจารย์เรียบร้อยครับ
+      // 🟢 เรียกใช้คำสั่งของ Gemini ตามสไลด์หน้า 44 ของอาจารย์
       const geminiResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: content,
       });
+      
       botReplyText = geminiResponse.text || 'ขออภัยครับ ระบบไม่สามารถสร้างคำตอบได้';
       
     } catch (err) {
@@ -104,7 +105,7 @@ async function handleEvent(event) {
       }
       const buffer = Buffer.concat(chunks);
 
-      // 2. ส่งรูปให้ Gemini วิเคราะห์สายพันธุ์สัตว์ (ใช้ตัวแปร geminiResponse ตามสไตล์อาจารย์)
+      // 2. ส่งรูปให้ Gemini วิเคราะห์สายพันธุ์สัตว์
       const geminiResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
@@ -161,7 +162,7 @@ async function handleEvent(event) {
     botReplyText = `ได้รับข้อความประเภท ${messageType} แล้วครับ`;
   }
 
-  // 🟢 ส่งข้อมูลเข้าฐานข้อมูล Supabase (ล้อตามโครงสร้างในสไลด์อาจารย์ด้านล่าง)
+  // 🟢 บันทึกข้อมูลลงฐานข้อมูล Supabase และตอบแชทกลับหาผู้ใช้
   try {
     const { error } = await supabase
       .from('messages')
@@ -172,7 +173,7 @@ async function handleEvent(event) {
           type: messageType,
           content: content,
           reply_token: replyToken,
-          reply_content: botReplyText // บันทึกคู่คำตอบที่มาจาก Gemini ลงไปด้วย
+          reply_content: botReplyText 
         }
       ]);
 
@@ -180,7 +181,7 @@ async function handleEvent(event) {
       console.error('Supabase Insert Error:', error.message);
     }
 
-    // ตอบกลับข้อความหาผู้ใช้ใน LINE
+    // ตอบกลับข้อความหาผู้ใช้ใน LINE (ถ้าเป็น Text ค่า botReplyText จะเป็นคำตอบจาก Gemini แล้ว)
     return await client.replyMessage({
       replyToken: replyToken,
       messages: [{ type: 'text', text: botReplyText }],
